@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/sheikh-saqib/distributed-payments-ledger-system/internal/interfaces"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/models"
+	"github.com/shopspring/decimal"
 )
 
 // Ledger is the main struct representing our ledger system
@@ -59,7 +60,7 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) err
 	defer creditMutex.Unlock()
 
 	// Basic validation: the transaction amount must be positive
-	if tx.Amount <= 0 {
+	if tx.Amount.Cmp(decimal.Zero) <= 0 {
 		return errors.New("amount must be positive")
 	}
 
@@ -71,7 +72,7 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) err
 	debit := models.LedgerEntry{
 		ID:        tx.ID + "-debit",
 		AccountID: tx.FromAccount,
-		Amount:    -tx.Amount,
+		Amount:    tx.Amount.Neg(),
 		CreatedAt: tx.CreatedAt,
 	}
 

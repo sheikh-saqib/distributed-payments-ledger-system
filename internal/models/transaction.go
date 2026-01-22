@@ -1,12 +1,16 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/shopspring/decimal"
+)
 
 // Transaction represents an intent to transfer money
 type Transaction struct {
 	ID          string
 	FromAccount string
 	ToAccount   string
-	Amount      float64
+	Amount      decimal.Decimal
 	CreatedAt   time.Time
 }
