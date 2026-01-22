@@ -11,6 +11,7 @@ import (
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/ledger"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/models"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/storage/memory"
+	"github.com/shopspring/decimal"
 )
 
 func main() {
@@ -32,9 +33,9 @@ func main() {
 
 		// Request DTO (like a C# request model)
 		var req struct {
-			FromAccount string  `json:"from_account"`
-			ToAccount   string  `json:"to_account"`
-			Amount      float64 `json:"amount"`
+			FromAccount string          `json:"from_account"`
+			ToAccount   string          `json:"to_account"`
+			Amount      decimal.Decimal `json:"amount"`
 		}
 
 		// Parse JSON body
