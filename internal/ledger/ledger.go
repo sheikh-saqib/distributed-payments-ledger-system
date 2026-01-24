@@ -104,3 +104,25 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) err
 	// If everything succeeded, return nil indicating no error
 	return nil
 }
+
+func (l *Ledger) GetBalance(accountId string) (decimal.Decimal, error) {
+	ledgerEntries, err := l.store.GetEntriesByAccount(accountId)
+
+	if err != nil {
+		return decimal.Zero, err
+	}
+	balance := decimal.Zero
+
+	for _, ledgerEntry := range ledgerEntries {
+		balance = balance.Add(ledgerEntry.Amount)
+	}
+	return balance, nil
+}
+func (l *Ledger) GetLedgerEntries() ([]models.LedgerEntry, error) {
+	ledgerEntries, err := l.store.GetLedgerEntries()
+
+	if err != nil {
+		return []models.LedgerEntry{}, err
+	}
+	return ledgerEntries, nil
+}

@@ -8,4 +8,6 @@ import (
 
 type LedgerStore interface {
 	SaveEntry(ctx context.Context, entry models.LedgerEntry) error
+	GetEntriesByAccount(accountId string) ([]models.LedgerEntry, error)
+	GetLedgerEntries() ([]models.LedgerEntry, error)
 }

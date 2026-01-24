@@ -46,5 +46,28 @@ func (m *MemoryLedgerStore) GetEntries() []models.LedgerEntry {
 	return copied           // return the copy so external code can't modify internal state
 }
 
+func (m *MemoryLedgerStore) GetEntriesByAccount(accountId string) ([]models.LedgerEntry, error) {
+
+	m.mu.Lock()         // lock the mutex to prevent concurrent writes
+	defer m.mu.Unlock() // unlock automatically when function exits (even if error occurs)
+
+	var result []models.LedgerEntry
+
+	for _, e := range m.entries {
+		if e.AccountID == accountId {
+			result = append(result, e)
+		}
+	}
+	return result, nil
+}
+
+func (m *MemoryLedgerStore) GetLedgerEntries() ([]models.LedgerEntry, error) {
+
+	m.mu.Lock()         // lock the mutex to prevent concurrent writes
+	defer m.mu.Unlock() // unlock automatically when function exits (even if error occurs)
+
+	return m.entries, nil
+}
+
 // Compile-time check: ensure MemoryLedgerStore implements LedgerStore interface
 var _ interfaces.LedgerStore = (*MemoryLedgerStore)(nil)

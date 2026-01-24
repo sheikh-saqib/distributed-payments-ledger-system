@@ -63,6 +63,53 @@ func main() {
 		w.Write([]byte(`{"status":"transaction posted"}`))
 	})
 
+	http.HandleFunc("/accounts/balance", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		accountId := r.URL.Query().Get("account_id")
+		if accountId == "" {
+			http.Error(w, "account_id is a mandatory field", http.StatusBadRequest)
+			return
+		}
+
+		balance, err := ledgerService.GetBalance(accountId)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		response := struct {
+			AccountID string          `json:"account_id"`
+			Balance   decimal.Decimal `json:"balance"`
+		}{
+			AccountID: accountId,
+			Balance:   balance,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+	})
+
+	http.HandleFunc("/ledgerEntries", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		ledgerEntries, err := ledgerService.GetLedgerEntries()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ledgerEntries)
+
+	})
 	log.Println("Starting server on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 
