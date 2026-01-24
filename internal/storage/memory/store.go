@@ -11,14 +11,16 @@ import (
 // MemoryLedgerStore is an in-memory implementation of storage.LedgerStore.
 // It stores ledger entries in memory (slice) and is thread-safe for concurrent writes.
 type MemoryLedgerStore struct {
-	mu      sync.Mutex           // mutex to protect entries slice from concurrent access
-	entries []models.LedgerEntry // slice that holds all ledger entries
+	mu           sync.Mutex                    // mutex to protect entries slice from concurrent access
+	entries      []models.LedgerEntry          // slice that holds all ledger entries
+	transactions map[string]models.Transaction // slice that holds all transaction entries
 }
 
 // NewMemoryLedgerStore creates and returns a new MemoryLedgerStore instance
 func NewMemoryLedgerStore() *MemoryLedgerStore {
 	return &MemoryLedgerStore{
-		entries: make([]models.LedgerEntry, 0), // initialize an empty slice of LedgerEntry
+		entries:      make([]models.LedgerEntry, 0),
+		transactions: make(map[string]models.Transaction), // initialize an empty slice of Transactions
 	}
 }
 
@@ -35,7 +37,7 @@ func (m *MemoryLedgerStore) SaveEntry(ctx context.Context, entry models.LedgerEn
 
 // GetEntries returns a copy of all ledger entries stored in memory.
 // Useful for testing, debugging, and printing ledger state.
-func (m *MemoryLedgerStore) GetEntries() []models.LedgerEntry {
+func (m *MemoryLedgerStore) GetLedgerEntries() ([]models.LedgerEntry, error) {
 
 	m.mu.Lock()         // lock to prevent concurrent modification while reading
 	defer m.mu.Unlock() // unlock automatically at the end
@@ -43,7 +45,7 @@ func (m *MemoryLedgerStore) GetEntries() []models.LedgerEntry {
 	// create a new slice to copy entries
 	copied := make([]models.LedgerEntry, len(m.entries))
 	copy(copied, m.entries) // copy all entries to the new slice
-	return copied           // return the copy so external code can't modify internal state
+	return copied, nil      // return the copy so external code can't modify internal state
 }
 
 func (m *MemoryLedgerStore) GetEntriesByAccount(accountId string) ([]models.LedgerEntry, error) {
@@ -61,12 +63,21 @@ func (m *MemoryLedgerStore) GetEntriesByAccount(accountId string) ([]models.Ledg
 	return result, nil
 }
 
-func (m *MemoryLedgerStore) GetLedgerEntries() ([]models.LedgerEntry, error) {
+func (m *MemoryLedgerStore) TransactionExists(idempotencyKey string) (bool, error) {
+
+	m.mu.Lock()         // lock the mutex to prevent concurrent writes
+	defer m.mu.Unlock() // unlock automatically when function exits (even if error occurs)
+	_, exists := m.transactions[idempotencyKey]
+	return exists, nil
+}
+
+func (m *MemoryLedgerStore) SaveTransaction(transaction models.Transaction) error {
 
 	m.mu.Lock()         // lock the mutex to prevent concurrent writes
 	defer m.mu.Unlock() // unlock automatically when function exits (even if error occurs)
 
-	return m.entries, nil
+	m.transactions[transaction.IdempotencyKey] = transaction
+	return nil
 }
 
 // Compile-time check: ensure MemoryLedgerStore implements LedgerStore interface
