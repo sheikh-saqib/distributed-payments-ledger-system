@@ -43,6 +43,15 @@ func (l *Ledger) getAccountLock(accountId string) *sync.Mutex {
 // ensuring double-entry accounting, and then saves them to the store
 func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) error {
 
+	// Idempotency check
+	exists, err := l.store.TransactionExists(tx.IdempotencyKey)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return nil
+	}
 	//Get Locks for both accounts
 	debitMutex := l.getAccountLock(tx.FromAccount)
 	creditMutex := l.getAccountLock(tx.ToAccount)
@@ -64,6 +73,10 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) err
 		return errors.New("amount must be positive")
 	}
 
+	//save the transaction
+	if err := l.store.SaveTransaction(tx); err != nil {
+		return err
+	}
 	// Create the debit entry (money leaving the sender's account)
 	// - ID: unique entry ID based on transaction ID + "-debit"
 	// - AccountID: from which account money is taken
@@ -88,6 +101,9 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) err
 		CreatedAt: tx.CreatedAt,
 	}
 
+	if err := l.store.SaveTransaction(tx); err != nil {
+		return err
+	}
 	// Save the debit entry using the LedgerStore interface
 	// If saving fails, return the error immediately
 	if err := l.store.SaveEntry(ctx, debit); err != nil {
@@ -103,4 +119,26 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) err
 
 	// If everything succeeded, return nil indicating no error
 	return nil
+}
+
+func (l *Ledger) GetBalance(accountId string) (decimal.Decimal, error) {
+	ledgerEntries, err := l.store.GetEntriesByAccount(accountId)
+
+	if err != nil {
+		return decimal.Zero, err
+	}
+	balance := decimal.Zero
+
+	for _, ledgerEntry := range ledgerEntries {
+		balance = balance.Add(ledgerEntry.Amount)
+	}
+	return balance, nil
+}
+func (l *Ledger) GetLedgerEntries() ([]models.LedgerEntry, error) {
+	ledgerEntries, err := l.store.GetLedgerEntries()
+
+	if err != nil {
+		return []models.LedgerEntry{}, err
+	}
+	return ledgerEntries, nil
 }

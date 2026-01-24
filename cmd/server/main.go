@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	interfaces "github.com/sheikh-saqib/distributed-payments-ledger-system/internal/interfaces"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/ledger"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/models"
@@ -31,7 +32,8 @@ func main() {
 			return
 		}
 
-		// Request DTO (like a C# request model)
+		idempotencyKey := r.Header.Get("Idempotency-Key")
+
 		var req struct {
 			FromAccount string          `json:"from_account"`
 			ToAccount   string          `json:"to_account"`
@@ -46,23 +48,81 @@ func main() {
 
 		// Create domain transaction
 		tx := models.Transaction{
-			ID:          time.Now().Format("20060102150405"),
-			FromAccount: req.FromAccount,
-			ToAccount:   req.ToAccount,
-			Amount:      req.Amount,
-			CreatedAt:   time.Now(),
+			ID:             uuid.New().String(),
+			IdempotencyKey: idempotencyKey,
+			FromAccount:    req.FromAccount,
+			ToAccount:      req.ToAccount,
+			Amount:         req.Amount,
+			CreatedAt:      time.Now(),
 		}
 
 		// Call domain logic
-		if err := ledgerService.PostTransaction(context.Background(), tx); err != nil {
+		err := ledgerService.PostTransaction(context.Background(), tx)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
+		// if transaction.Replayed {
+		// 	w.WriteHeader(http.StatusOK)
+		// } else {
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{"status":"transaction posted"}`))
+		w.Write([]byte(`{"status":"Created Transaction"}`))
+		// }
+
+		// if err := json.NewEncoder(w).Encode(transaction); err != nil {
+		// 	http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		// 	return
+		// }
 	})
 
+	http.HandleFunc("/accounts/balance", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		accountId := r.URL.Query().Get("account_id")
+		if accountId == "" {
+			http.Error(w, "account_id is a mandatory field", http.StatusBadRequest)
+			return
+		}
+
+		balance, err := ledgerService.GetBalance(accountId)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		response := struct {
+			AccountID string          `json:"account_id"`
+			Balance   decimal.Decimal `json:"balance"`
+		}{
+			AccountID: accountId,
+			Balance:   balance,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+	})
+
+	http.HandleFunc("/ledgerEntries", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		ledgerEntries, err := ledgerService.GetLedgerEntries()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ledgerEntries)
+
+	})
 	log.Println("Starting server on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 
