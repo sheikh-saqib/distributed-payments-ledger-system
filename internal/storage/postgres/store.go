@@ -95,6 +95,8 @@ func (p *PostgresLedgerStore) GetEntriesByAccount(accountId string) ([]models.Le
 		return nil, err
 	}
 
+	defer rows.Close()
+
 	var entries []models.LedgerEntry
 	for rows.Next() {
 		var entry models.LedgerEntry
