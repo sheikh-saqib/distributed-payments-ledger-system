@@ -72,11 +72,6 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) err
 	if tx.Amount.Cmp(decimal.Zero) <= 0 {
 		return errors.New("amount must be positive")
 	}
-
-	//save the transaction
-	if err := l.store.SaveTransaction(tx); err != nil {
-		return err
-	}
 	// Create the debit entry (money leaving the sender's account)
 	// - ID: unique entry ID based on transaction ID + "-debit"
 	// - AccountID: from which account money is taken
