@@ -2,22 +2,58 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	interfaces "github.com/sheikh-saqib/distributed-payments-ledger-system/internal/interfaces"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/ledger"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/models"
-	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/storage/memory"
+
+	// "github.com/sheikh-saqib/distributed-payments-ledger-system/internal/storage/memory"
+	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/storage/postgres"
 	"github.com/shopspring/decimal"
 )
 
 func main() {
 
-	var store interfaces.LedgerStore = memory.NewMemoryLedgerStore()
+	// var store interfaces.LedgerStore = memory.NewMemoryLedgerStore()
+	// ledgerService := ledger.NewLedger(store)
+	// PostgreSQL connection string
+
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found.")
+	}
+
+	connStr := fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASSWORD"),
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		os.Getenv("DB_NAME"),
+	)
+
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Ping to check connection
+	if err := db.Ping(); err != nil {
+		log.Fatal(err)
+	}
+	// Inject DB into PostgresLedgerStore
+	var store interfaces.LedgerStore = postgres.NewPostgresLedgerStore(db)
+
+	// Create Ledger service with Postgres store
 	ledgerService := ledger.NewLedger(store)
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -57,23 +93,18 @@ func main() {
 		}
 
 		// Call domain logic
-		err := ledgerService.PostTransaction(context.Background(), tx)
+		exists, err := ledgerService.PostTransaction(context.Background(), tx)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if exists {
+			http.Error(w, "Duplicate Transaction", http.StatusOK)
+			return
+		}
 
-		// if transaction.Replayed {
-		// 	w.WriteHeader(http.StatusOK)
-		// } else {
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(`{"status":"Created Transaction"}`))
-		// }
-
-		// if err := json.NewEncoder(w).Encode(transaction); err != nil {
-		// 	http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		// 	return
-		// }
 	})
 
 	http.HandleFunc("/accounts/balance", func(w http.ResponseWriter, r *http.Request) {
