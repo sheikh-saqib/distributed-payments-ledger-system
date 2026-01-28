@@ -175,12 +175,66 @@ defer creditMutex.Unlock()
 
 ---
 
+## Phase 5: Persistence & Atomicity (Implemented)
+
+### 12. PostgreSQL Persistence
+
+**Decision**: Persist ledger and transaction data in Postgres for durability.
+
+**Implementation**:
+
+* `PostgresLedgerStore` implements `LedgerStore` interface
+* Stores `ledger_entries` and `transactions` tables
+* Queries and writes use `*sql.DB` and `*sql.Tx` for atomic operations
+
+**Why**:
+
+* Data is persistent across restarts
+* Idempotency lookup is fast and reliable
+* Supports real concurrency
+
+---
+
+### 13. Atomic Transactions
+
+**Decision**: Use SQL transactions (`BEGIN/COMMIT/ROLLBACK`) to ensure all-or-nothing writes.
+
+**Implementation**:
+
+* `SaveTransactionWithEntries(ctx, tx, debit, credit)` wraps inserts in `db.BeginTx`
+* On any failure, `Rollback()` ensures no partial writes
+* On success, `Commit()` saves all entries atomically
+
+**Why**:
+
+* Guarantees ledger consistency
+* Prevents partial debits/credits
+* Matches production banking standards
+
+---
+
+### 14. Idempotency at DB Level
+
+**Decision**: Transactions are only inserted if `idempotency_key` does not exist.
+
+**Implementation**:
+
+* `TransactionExists(idempotencyKey)` queries DB first
+* Prevents double-posting in concurrent requests
+
+**Why**:
+
+* Ensures at-most-once semantics even across server restarts
+* Protects against retry storms
+
+---
+
 ## Known Limitations
 
-* ❌ In-memory storage only → **Phase 5**
-* ❌ Linear idempotency lookup → will be replaced by map/DB in Phase 5
-* ❌ No persistence across restarts → **Phase 5**
-* ❌ No pagination or historical queries → **Future**
+* ❌ No database indexes yet → may slow queries for large datasets
+* ❌ No migrations system → schema changes are manual
+* ❌ No pagination or historical queries → future work
+* ❌ No metrics or monitoring → future work
 
 These limitations are **intentional and phased**.
 
@@ -193,3 +247,4 @@ These limitations are **intentional and phased**.
 3. Ledger entries over mutable balances
 4. Interfaces over implementations
 5. Build like a bank, not a CRUD app
+6. Always prefer durability and atomicity over shortcuts

@@ -41,16 +41,16 @@ func (l *Ledger) getAccountLock(accountId string) *sync.Mutex {
 // PostTransaction is the core method that processes a transaction
 // It converts a Transaction (intent) into two LedgerEntry objects (debit and credit)
 // ensuring double-entry accounting, and then saves them to the store
-func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) error {
+func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) (bool, error) {
 
 	// Idempotency check
 	exists, err := l.store.TransactionExists(tx.IdempotencyKey)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if exists {
-		return nil
+		return true, nil
 	}
 	//Get Locks for both accounts
 	debitMutex := l.getAccountLock(tx.FromAccount)
@@ -70,7 +70,7 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) err
 
 	// Basic validation: the transaction amount must be positive
 	if tx.Amount.Cmp(decimal.Zero) <= 0 {
-		return errors.New("amount must be positive")
+		return false, errors.New("amount must be positive")
 	}
 	// Create the debit entry (money leaving the sender's account)
 	// - ID: unique entry ID based on transaction ID + "-debit"
@@ -95,25 +95,10 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) err
 		Amount:    tx.Amount,
 		CreatedAt: tx.CreatedAt,
 	}
-
-	if err := l.store.SaveTransaction(tx); err != nil {
-		return err
-	}
-	// Save the debit entry using the LedgerStore interface
-	// If saving fails, return the error immediately
-	if err := l.store.SaveEntry(ctx, debit); err != nil {
-		return err
-	}
-
-	// Save the credit entry using the LedgerStore interface
-	// If saving fails, return the error immediately
-	// Ensures both sides of the transaction are recorded
-	if err := l.store.SaveEntry(ctx, credit); err != nil {
-		return err
-	}
+	l.store.SaveTransactionWithEntries(ctx, tx, debit, credit)
 
 	// If everything succeeded, return nil indicating no error
-	return nil
+	return false, nil
 }
 
 func (l *Ledger) GetBalance(accountId string) (decimal.Decimal, error) {

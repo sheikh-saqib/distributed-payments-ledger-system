@@ -93,23 +93,18 @@ func main() {
 		}
 
 		// Call domain logic
-		err := ledgerService.PostTransaction(context.Background(), tx)
+		exists, err := ledgerService.PostTransaction(context.Background(), tx)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if exists {
+			http.Error(w, "Duplicate Transaction", http.StatusOK)
+			return
+		}
 
-		// if transaction.Replayed {
-		// 	w.WriteHeader(http.StatusOK)
-		// } else {
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(`{"status":"Created Transaction"}`))
-		// }
-
-		// if err := json.NewEncoder(w).Encode(transaction); err != nil {
-		// 	http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		// 	return
-		// }
 	})
 
 	http.HandleFunc("/accounts/balance", func(w http.ResponseWriter, r *http.Request) {

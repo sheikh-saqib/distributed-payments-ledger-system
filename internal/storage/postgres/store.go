@@ -34,21 +34,51 @@ func (p *PostgresLedgerStore) TransactionExists(idempotencyKey string) (bool, er
 	return true, nil
 }
 
-func (p *PostgresLedgerStore) SaveTransaction(tx models.Transaction) error {
+func (p *PostgresLedgerStore) SaveTransaction(tx models.Transaction, dbTx *sql.Tx) error {
 	const query = `INSERT INTO transactions(id, idempotency_key,from_account,to_account,amount,created_at)
 	VALUES ($1,$2,$3,$4,$5,$6)`
 
-	_, err := p.db.Exec(query, tx.ID, tx.IdempotencyKey, tx.FromAccount, tx.ToAccount, tx.Amount, tx.CreatedAt)
+	_, err := dbTx.Exec(query, tx.ID, tx.IdempotencyKey, tx.FromAccount, tx.ToAccount, tx.Amount, tx.CreatedAt)
 
 	return err
 }
 
-func (p *PostgresLedgerStore) SaveEntry(ctx context.Context, ledgerEntry models.LedgerEntry) error {
+func (p *PostgresLedgerStore) SaveEntry(ctx context.Context, ledgerEntry models.LedgerEntry, dbTx *sql.Tx) error {
 	const query = `INSERT INTO ledger_entries (id,account_id, amount,created_at)
 	VALUES ($1,$2,$3,$4)`
 
-	_, err := p.db.ExecContext(ctx, query, ledgerEntry.AccountID, ledgerEntry.AccountID, ledgerEntry.Amount, ledgerEntry.CreatedAt)
+	_, err := dbTx.ExecContext(ctx, query, ledgerEntry.ID, ledgerEntry.AccountID, ledgerEntry.Amount, ledgerEntry.CreatedAt)
 	return err
+}
+
+func (p *PostgresLedgerStore) SaveTransactionWithEntries(ctx context.Context, tx models.Transaction, debit models.LedgerEntry, credit models.LedgerEntry) error {
+
+	dbTx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			dbTx.Rollback()
+		}
+	}()
+
+	err = p.SaveTransaction(tx, dbTx)
+	if err != nil {
+		return err
+	}
+
+	err = p.SaveEntry(ctx, debit, dbTx)
+	if err != nil {
+		return err
+	}
+
+	err = p.SaveEntry(ctx, credit, dbTx)
+	if err != nil {
+		return err
+	}
+	return dbTx.Commit()
 }
 
 func (p *PostgresLedgerStore) GetLedgerEntries() ([]models.LedgerEntry, error) {
