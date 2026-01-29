@@ -18,18 +18,19 @@ import (
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/models"
 
 	// "github.com/sheikh-saqib/distributed-payments-ledger-system/internal/storage/memory"
+	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/logger"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/storage/postgres"
 	"github.com/shopspring/decimal"
 )
 
 func main() {
-
+	appLogger := logger.New()
 	// var store interfaces.LedgerStore = memory.NewMemoryLedgerStore()
 	// ledgerService := ledger.NewLedger(store)
 	// PostgreSQL connection string
 
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found.")
+		appLogger.Error("No .env file found.")
 	}
 
 	connStr := fmt.Sprintf(
@@ -43,18 +44,18 @@ func main() {
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Fatal(err)
+		appLogger.Error("failed to open database connection", "error", err)
 	}
 
 	// Ping to check connection
 	if err := db.Ping(); err != nil {
-		log.Fatal(err)
+		appLogger.Error("database ping failed", "error", err)
 	}
 	// Inject DB into PostgresLedgerStore
 	var store interfaces.LedgerStore = postgres.NewPostgresLedgerStore(db)
 
 	// Create Ledger service with Postgres store
-	ledgerService := ledger.NewLedger(store)
+	ledgerService := ledger.NewLedger(store, appLogger)
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -99,7 +100,8 @@ func main() {
 			return
 		}
 		if exists {
-			http.Error(w, "Duplicate Transaction", http.StatusOK)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"already processed"}`))
 			return
 		}
 
