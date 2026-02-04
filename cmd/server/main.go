@@ -13,7 +13,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	kafka "github.com/sheikh-saqib/distributed-payments-ledger-system/internal/events/kafka"
 	interfaces "github.com/sheikh-saqib/distributed-payments-ledger-system/internal/interfaces"
+
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/ledger"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/models"
 
@@ -24,6 +26,7 @@ import (
 )
 
 func main() {
+	publisher := kafka.NewPublisher([]string{"localhost:9092"})
 	appLogger := logger.New()
 	// var store interfaces.LedgerStore = memory.NewMemoryLedgerStore()
 	// ledgerService := ledger.NewLedger(store)
@@ -55,7 +58,7 @@ func main() {
 	var store interfaces.LedgerStore = postgres.NewPostgresLedgerStore(db)
 
 	// Create Ledger service with Postgres store
-	ledgerService := ledger.NewLedger(store, appLogger)
+	ledgerService := ledger.NewLedger(store, appLogger, publisher)
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

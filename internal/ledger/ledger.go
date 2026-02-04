@@ -5,9 +5,11 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	interfaces "github.com/sheikh-saqib/distributed-payments-ledger-system/internal/interfaces"
 	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/models"
+	"github.com/sheikh-saqib/distributed-payments-ledger-system/internal/models/events"
 	"github.com/shopspring/decimal"
 )
 
@@ -18,14 +20,16 @@ type Ledger struct {
 	muMap     map[string]*sync.Mutex //stores the *sync.Mutex for each account in a map
 	mapMu     sync.Mutex             // protects the muMap itself
 	appLogger *slog.Logger
+	publisher interfaces.EventPublisher
 }
 
 // NewLedger is a constructor function that creates a new Ledger instance
 // We pass in a storage implementation (MemoryLedgerStore, DB, etc.)
-func NewLedger(store interfaces.LedgerStore, appLogger *slog.Logger) *Ledger {
+func NewLedger(store interfaces.LedgerStore, appLogger *slog.Logger, publisher interfaces.EventPublisher) *Ledger {
 	return &Ledger{
 		store:     store, // Assign the storage implementation to the ledger's store field
 		appLogger: appLogger,
+		publisher: publisher,
 		muMap:     make(map[string]*sync.Mutex),
 	}
 }
@@ -109,7 +113,21 @@ func (l *Ledger) PostTransaction(ctx context.Context, tx models.Transaction) (bo
 		CreatedAt: tx.CreatedAt,
 	}
 	l.store.SaveTransactionWithEntries(ctx, tx, debit, credit)
+	//Kafka Event
+	event := events.TransactionCompleted{
+		TransactionID: tx.ID,
+		FromAccount:   tx.FromAccount,
+		ToAccount:     tx.ToAccount,
+		Amount:        tx.Amount,
+		OccurredAt:    time.Now(),
+	}
 
+	if err := l.publisher.Publish("transactions.completed", event); err != nil {
+		l.appLogger.Error("failed to publish kafka event",
+			"transaction_id", tx.ID,
+			"error", err,
+		)
+	}
 	// If everything succeeded, return nil indicating no error
 	return false, nil
 }
